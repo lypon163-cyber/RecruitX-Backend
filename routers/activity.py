@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from database import get_session
-from models import Activity, User, School # 引入 School
+from models import Activity, User, School
 from routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/v1/activity", tags=["活动管理"])
@@ -28,10 +28,9 @@ def create_activity(
     if data.end_time <= data.start_time:
         raise HTTPException(status_code=400, detail="结束时间必须晚于开始时间")
 
-    # --- 修复：确保有学校ID ---
+    # 确保超管有学校ID，没有就自动创建一个
     school_id = current_user.school_id
     if not school_id:
-        # 如果超管没绑定学校，先检查数据库里有没有默认学校，没有就建一个
         default_school = session.exec(select(School).where(School.id == 1)).first()
         if not default_school:
             default_school = School(name="默认测试大学", short_name="TEST")
@@ -40,7 +39,6 @@ def create_activity(
             session.refresh(default_school)
         
         school_id = default_school.id
-        # 顺便把超管和这个学校绑定
         current_user.school_id = school_id
         session.add(current_user)
         session.commit()

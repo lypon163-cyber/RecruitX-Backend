@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from database import get_session
-from models import Department, User, School
+from models import Department, User, School, Application  # 加了 Application
 from routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/v1/department", tags=["部门管理"])
@@ -21,7 +21,6 @@ def create_department(
     if current_user.role != "super":
         raise HTTPException(status_code=403, detail="仅超管可建部门")
     
-    # 建部门
     new_dept = Department(
         school_id=current_user.school_id or 1,
         name=data.name
@@ -30,3 +29,20 @@ def create_department(
     session.commit()
     session.refresh(new_dept)
     return {"msg": "部门创建成功", "dept_id": new_dept.id, "name": new_dept.name}
+
+# 👇 新增：查部门列表
+@router.get("/list", summary="获取部门列表及报名人数")
+def get_department_list(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    depts = session.exec(select(Department).where(Department.school_id == (current_user.school_id or 1))).all()
+    result = []
+    for d in depts:
+        count = len(session.exec(
+            select(Application).where(
+                (Application.wish_1_dept_id == d.id) | (Application.wish_2_dept_id == d.id)
+            )
+        ).all())
+        result.append({"id": d.id, "name": d.name, "count": count})
+    return {"msg": "success", "data": result}
